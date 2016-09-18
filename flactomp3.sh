@@ -22,6 +22,7 @@ main()
 	PrepareEnvironment "$@";
 	ConvertFiles
 	FolderManage
+	CheckForFilesCount
 	echo "Conversiond ended."
 }
 
@@ -145,7 +146,7 @@ function ConvertFlac
 # flac decoding and mp3 coding with selected options:
 	#flac -c -d "$1" | lame --ti "$Picture_name" -b "$Bit_rate" -m s -q 0 -s "$Sample_rate" - "$Outlame"
 	#-d = decode, -c = write output to sdout
-	flac -f -d "$1" -o "$WaveFileName"
+	flac --decode-through-errors -f -d "$1" -o "$WaveFileName"
 	lame --noreplaygain --ti "$Picture_name" -b "$Bit_rate" -m s -q 0 -s "$Sample_rate" "$WaveFileName" "$Outlame"
 	rm -f "$WaveFileName"
 	#Set mp3 file tags as they were in flac file.
@@ -210,6 +211,23 @@ function MoveImageFiles
 		mv *.png "$ImagesFilesDirectoryName" 
 		mv *.jpeg "$ImagesFilesDirectoryName"
 		mv *.bmp "$ImagesFilesDirectoryName" 
+	fi
+}
+
+function CheckForFilesCount
+{
+	local mp3FilesCount=0
+	if [ "$createDirectory" == "True" ];then 
+		mp3FilesCount=`ls -lhs $MusicFilesDirectoryName | grep mp3 | wc -l`
+	else
+		mp3FilesCount=`ls -lhs | grep mp3 | wc -l`
+	fi
+
+	local flacFilesCount=`ls -lhs $MusicFilesDirectoryNameFlac | grep flac | wc -l`
+	if [ $flacFilesCount -eq $mp3FilesCount ];then
+		echo "Mp3 files count match flac files count."
+	else
+		echo "Something gone wrong, mp3 files count does not match flac files count."
 	fi
 }
 
