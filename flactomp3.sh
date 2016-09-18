@@ -1,6 +1,6 @@
-#!/bin/bash -xe
+#!/bin/bash
 clear
-chmod 777 *.*;
+createDirectory="False";
 Disc_number=1/1;
 Bit_rate=320;
 Sample_rate=44.1;
@@ -19,7 +19,7 @@ FlacFilesCount=0;
 
 main()
 {
-	PrepareEnvironment
+	PrepareEnvironment "$@";
 	ConvertFiles
 	FolderManage
 	echo "Conversiond ended."
@@ -28,7 +28,19 @@ main()
 function PrepareEnvironment
 {
 	CheckForNecessaryApplications
-	CheckForFolderFile
+	local imageExist=$(CheckForFolderFile)
+	if [ "$imageExist" == "False" ];then
+		echo "There is no file $Picture_name in current directory."
+		echo "Searching for file in input files..."
+		ExportImageFromFile
+	fi
+	imageExist=$(CheckForFolderFile)
+	if [ "$imageExist" == "False" ];then
+		echo "Cannot find file $Picture_name and cannot export it from flac file. Aborting script."	
+		exit 1;
+	fi
+	echo "Done."
+	DecideIfCreateDiscDirectory "$@";
 }
 
 function CheckForNecessaryApplications
@@ -44,17 +56,39 @@ function AppIsInstalled
 	hash $applicationName 2>/dev/null || { echo >&2 "I require $applicationName but it's not installed.  Aborting."; exit 1; }
 }
 
+function ExportImageFromFile
+{
+	for a in *.flac
+	do
+		metaflac "$a" --export-picture-to="$Picture_name"
+		local imageExist=$(CheckForFolderFile)
+		if [ "$imageExist" == "True" ];then
+			break;
+		fi
+	done
+}
+
+function DecideIfCreateDiscDirectory
+{
+	if [ "$1" == "--create-disc-directory" ];then
+		createDirectory="True";
+		echo "Directory $MusicFilesDirectoryName will be created.";
+	fi
+}
+
 function CheckForFolderFile
 {
-	if [ ! -f "$Picture_name" ]; then
-		echo "Picture file $Picture_name not found, aborting script."
-		exit 1;
+	if [ -f "$Picture_name" ]; then
+		echo "True";
+	else
+		echo "False";
 	fi
 }
 
 function ConvertFiles
 {
 	FlacFilesCount=`CountTracks`
+	
 	for a in *.flac
 	do
 		ConvertFlac "$a"
@@ -73,12 +107,22 @@ function ConvertFlac
 {
 	echo "Processing file $1 ... "
 	printf "Geting tags from flac file... "
-	Artist=`metaflac "$1" --show-tag=ARTIST | sed 's/.*=//'`;
-	Album=`metaflac "$1" --show-tag=ALBUM | sed 's/.*=//'`;
-	Genre=`metaflac "$1" --show-tag=GENRE | sed 's/.*=//'`;
-	Year=`metaflac "$1" --show-tag=DATE | sed 's/.*=//'`;
-	Title=`metaflac "$1" --show-tag=TITLE | sed 's/.*=//'`;
-	Track=`metaflac "$1" --show-tag=TRACKNUMBER | sed 's/.*=//'`;	
+	local Artist=`metaflac "$1" --show-tag=ARTIST | sed 's/.*=//'`;
+	local Album=`metaflac "$1" --show-tag=ALBUM | sed 's/.*=//'`;
+	local Genre=`metaflac "$1" --show-tag=GENRE | sed 's/.*=//'`;
+	if [ "$Genre" == "" ];then
+		echo "Genre tag is empty, aborting."
+		exit 1;
+	fi
+
+	local Year=`metaflac "$1" --show-tag=DATE | sed 's/.*=//'`;
+	local Title=`metaflac "$1" --show-tag=TITLE | sed 's/.*=//'`;
+	local Track=`metaflac "$1" --show-tag=TRACKNUMBER | sed 's/.*=//'`;	
+	local containsTracksCount=$(TrackNumberContainTrackCount $Track)
+	if [ "$containsTracksCount" == "True" ];then
+		echo "Track number ( $Track ) contains slash..."
+		Track=$(RemoveTracksCountFromTracknumber $Track)
+	fi
 	Track=`AddPrecedingZero $Track`
 	if [ "$Artist" == "" ];then
 		echo "Artist tag is empty, aborting."
@@ -114,6 +158,23 @@ function ConvertFlac
 	id3v2 --TPOS "$Disc_number" "$Outlame";
 }
 
+function TrackNumberContainTrackCount
+{
+	local TRACKNUMBER=$1
+	if [[ $TRACKNUMBER == */* ]];then
+		echo "True"
+	else
+		echo "False"
+	fi
+}
+
+function RemoveTracksCountFromTracknumber
+{
+	local trackNumber=$1
+	local result=`echo $trackNumber | cut -f1 -d"/"`
+	echo "$result"
+}
+
 function AddPrecedingZero
 {
 	Temp="$1";
@@ -133,20 +194,23 @@ function FolderManage
 
 function MoveMusicFiles
 {
-	mkdir --parents --mode=777 "$MusicFilesDirectoryName"
-	mv *.mp3 "$MusicFilesDirectoryName"
-	mkdir --parents --mode=777 "$MusicFilesDirectoryNameFlac"
+	if [ "$createDirectory" == "True" ];then 
+		mkdir --parents "$MusicFilesDirectoryName"
+		mv *.mp3 "$MusicFilesDirectoryName"
+	fi
+	mkdir --parents "$MusicFilesDirectoryNameFlac"
 	mv *.flac "$MusicFilesDirectoryNameFlac"
 }
 
 function MoveImageFiles
 {
-	mkdir --parents --mode=777 "$ImagesFilesDirectoryName" 
-	mv *.jpg "$ImagesFilesDirectoryName" 
-	mv *.png "$ImagesFilesDirectoryName" 
-	mv *.jpeg "$ImagesFilesDirectoryName"
-	mv *.bmp "$ImagesFilesDirectoryName" 
+	if [ "$createDirectory" == "True" ];then 
+		mkdir --parents "$ImagesFilesDirectoryName" 
+		mv *.jpg "$ImagesFilesDirectoryName" 
+		mv *.png "$ImagesFilesDirectoryName" 
+		mv *.jpeg "$ImagesFilesDirectoryName"
+		mv *.bmp "$ImagesFilesDirectoryName" 
+	fi
 }
 
 main "$@";
-
